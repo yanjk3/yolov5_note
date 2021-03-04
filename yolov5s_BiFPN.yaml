@@ -1,0 +1,56 @@
+# parameters
+nc: 80  # number of classes
+depth_multiple: 0.33  # model depth multiple
+width_multiple: 0.50  # layer channel multiple
+
+# anchors
+anchors:
+  - [10,13, 16,30, 33,23]  # P3/8
+  - [30,61, 62,45, 59,119]  # P4/16
+  - [116,90, 156,198, 373,326]  # P5/32
+
+# YOLOv5 backbone
+backbone:
+  # [from, number, module, args]
+  # C3 number *= depth_multiple
+  # kernel_num *= width_multiple
+  # Focus args: [kernel_num, kernel_size]
+  # Conv args: [kernel_num, kernel_size, stride]
+  # C3 args: [kernel_num, short cut(default True)]
+  # SPP args: [kernel_num, [multiple scale kernel_size]]
+  # nn.Upsample args: [output size(None), scale, method]
+  # Concat args: [dimension]
+  # Detect args: [nc, anchors]
+  [[-1, 1, Focus, [64, 3]],  # 0, size: 3*640*640 -> 32*320*320
+   [-1, 1, Conv, [128, 3, 2]],  # 1, size: 32*320*320 -> 64*160*160
+   [-1, 3, C3, [128]],  # 2, size: 64*160*160 -> 64*160*160
+   [-1, 1, Conv, [256, 3, 2]],  # 3, size: 64*160*160 -> 128*80*80
+   [-1, 9, C3, [256]],  # 4, size: 128*80*80 -> 128*80*80
+   [-1, 1, Conv, [512, 3, 2]],  # 5, size: 128*80*80 -> 256*40*40
+   [-1, 9, C3, [512]],  # 6, size: 256*40*40 -> 256*40*40
+   [-1, 1, Conv, [1024, 3, 2]],  # 7, size: 256*40*40 -> 512*20*20
+   [-2, 1, Conv, [1024, 1, 1]],  # 8, size: 256*40*40 -> 512*40*40
+   [-2, 1, SPP, [1024, [5, 9, 13]]],  # 9, size: 512*20*20 -> 512*20*20
+  ]
+
+# YOLOv5 head
+head:
+  [[-1, 1, nn.Upsample, [None, 2, 'nearest']],  # 10, size: 512*20*20 -> 512*40*40
+   [[-1, 6], 1, Concat, [1]],  # 11, size: cat(512*40*40, 256*40*40) -> 768*40*40
+   [-1, 3, C3, [512, False]],  # 12, size: 768*40*40 -> 256*40*40
+
+   [-1, 1, Conv, [256, 3, 1]],  #13, size: 256*40*40 -> 128*40*40
+   [-1, 1, nn.Upsample, [None, 2, 'nearest']],  # 14, size: 128*40*40 -> 128*80*80
+   [[-1, 4], 1, Concat, [1]],  # 15, size: cat(128*80*80, 128*80*80) -> 256*80*80
+   [-1, 3, C3, [256, False]],  # 16, size: 256*80*80 -> 128*80*80
+
+   [-1, 1, Conv, [256, 3, 2]],  # 17, size: 128*80*80 -> 128*40*40
+   [[-1, 13, 8], 1, Concat, [1]],  # 18, cat(128*40*40, 128*40*40，512*40*40) -> 768*40*40
+   [-1, 3, C3, [512, False]],  # 19, size: 768*40*40 -> 256*40*40
+
+   [-1, 1, Conv, [512, 3, 2]],  # 20, size: 256*40*40 -> 256*20*20
+   [[-1, 9], 1, Concat, [1]],  # 21, cat(256*20*20, 512*20*20) -> 768*20*20
+   [-1, 3, C3, [1024, False]],  # 22, size: 768*20*20 -> 512*20*20
+
+   [[16, 19, 22], 1, Detect, [nc, anchors]],  # 23， size: 128*80*80 -> 255*80*80, 256*40*40 -> 255*40*40, 512*20*20 -> 255*20*20
+  ]
